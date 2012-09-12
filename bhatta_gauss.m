@@ -42,8 +42,7 @@ nk_components = [nk_det, nk_exp, nk_bhatta]
 K=zeros(n,n); %K(i,j) = <x_i | x_j>
 for i=1:n
     for j=1:i
-        %K(i,j) = exp(-norm(X(i,:)-X(j,:))^2 / (2*sigma^2));
-        K(i,j) = dot(X(i,:),(X(j,:)))^3;
+        K(i,j) = exp(-norm(X(i,:)-X(j,:))^2 / (2*sigma^2));
         % Polynomial kernel - corresponds to a known RKHS
         K(j,i) = K(i,j);
     end;
@@ -74,65 +73,6 @@ Kc = K - U - U' + mumu; % <Centered | Centered>
 %Kc(i,j) = <X*i | X*j>
 % All of this verified with linear & poly kernel
 
-%%
-
-%P(Phi): Actual RKHS for polynomial kernel (degree 3)
-%P(i,:) = Phi(X(i,:))
-P = zeros(n,35);
-for row=1:n
-    a = X(row,1);
-    b = X(row,2);
-    c = X(row,3);
-    d = X(row,4);
-    e = X(row,5);
-    P(row,:) = [a^3, 3^.5*a^2*b, 3^.5*a*b*b, b^3, 3^.5*a*a*c, 6^.5*a*b*c, ...
-        3^.5*b*b*c, 3^.5*a*c*c, 3^.5*b*c*c, c^3, 3^.5*a*a*d, 6^.5*a*b*d, 3^.5*b*b*d,...
-        6^.5*a*c*d, 6^.5*b*c*d, 3^.5*c*c*d, 3^.5*a*d*d, 3^.5*b*d*d, 3^.5*c*d*d, d^3,...
-        3^.5*a*a*e, 6^.5*a*b*e, 3^.5*b*b*e, 6^.5*a*c*e, 6^.5*b*c*e, 3^.5*c*c*e, ...
-        6^.5*a*d*e, 6^.5*b*d*e, 6^.5*c*d*e, 3^.5*d*d*e, 3^.5*a*e*e, 3^.5*b*e*e, 3^.5*c*e*e, ...
-        3^.5*d*e*e, e^3];
-end
-
-P1 = P(1:n1,   :);
-P2 = P(n1+1:n, :);
-P_mu1 = sum(P1,1)/n1;
-P_mu2 = sum(P2,1)/n2;
-P1c = P1 - repmat(P_mu1,n1,1);
-P2c = P2 - repmat(P_mu2,n2,1);
-Pc = [P1c; P2c];
-
-% Verification of correctness for P: K_P = K, Kc_P = Kc
-Kc_P = zeros(n,n);
-K_P = zeros(n,n);
-for i=1:n
-    for j=1:i
-        Kc_P(i,j) = dot(Pc(i,:),Pc(j,:));
-        Kc_P(j,i) = Kc_P(i,j);
-        K_P(i,j) = dot(P(i,:),P(j,:));
-        K_P(j,i) = K_P(i,j);
-    end
-end
-
-
-% Compute kernelized bhattacharrya in closed form
-P_S1 = eye(35)*z + P1c' * P1c / n1;
-P_S2 = eye(35)*z + P2c' * P2c / n2;
-
-P_mu3 = .5 * (inv(P_S1) * P_mu1' + inv(P_S2) * P_mu2')';
-P_S3 = 2 * inv(inv(P_S1) + inv(P_S1));
-
-p_det1 = det(P_S1)^(-.25);
-p_det2 = det(P_S2)^(-.25);
-p_det3 = det(P_S3)^(.5);
-
-P_det = p_det1*p_det2*p_det3;
-P_a = -.25*P_mu1*inv(P_S1)*P_mu1';
-P_b = -.25*P_mu2*inv(P_S2)*P_mu2';
-P_c = .5*P_mu3 * P_S3 * P_mu3';
-P_exp = exp(P_a + P_b + P_c);
-
-P_bhatta = P_det * P_exp
-
 % Now we pivot to computing the kernelized bhattacharrya using a
 % GS-basis
 
@@ -149,9 +89,6 @@ for ell=1:n-2
     GKG = G'*Kc*G;
     G(:,ell) = G(:,ell) / (GKG(ell,ell))^(.5);
 end
-
-GP = G'*Pc; % The RKHS representation of |g>
-% GP(i,:) = |gi>
 
 mu1 = sum(Kuc(1:n1,:)  *G,1)/n1;
 mu2 = sum(Kuc(n1+1:n,:)*G,1)/n2;

@@ -130,8 +130,8 @@ P_a = -.25*P_mu1*inv(P_S1)*P_mu1';
 P_b = -.25*P_mu2*inv(P_S2)*P_mu2';
 P_c = .5*P_mu3 * P_S3 * P_mu3';
 P_exp = exp(P_a + P_b + P_c);
-
-P_bhatta = P_det * P_exp
+P_bhatta = P_det * P_exp;
+P_components = [P_det, P_exp, P_bhatta]
 
 % Now we pivot to computing the kernelized bhattacharrya using a
 % GS-basis
@@ -184,8 +184,8 @@ e_exp3 =  e_mu3 * e_S3    * e_mu3' /2;
 e_det = e_det1 * e_det2 * e_det3;
 e_exp = exp(e_exp1 + e_exp2 + e_exp3);
 
-e_bhatta = e_det * e_exp
-e_bhatta_components = [e_det, e_exp, e_bhatta];
+e_bhatta = e_det * e_exp;
+e_components = [e_det, e_exp, e_bhatta]
 
 
 Kc1 = Kc(1:n1, 1:n1);
@@ -231,7 +231,7 @@ pca_exp3 = (pca_mu3  * pca_S3      * pca_mu3')/2;
 pca_det = pca_det1*pca_det2*pca_det3;
 pca_exp = exp(pca_exp1 + pca_exp2 + pca_exp3);
 
-pca_bhatta = pca_exp * pca_det
-pca_bhata_components = [pca_det, pca_exp, pca_bhatta];
+pca_bhatta = pca_exp * pca_det;
+pca_components = [pca_det, pca_exp, pca_bhatta]
 
 nk_P_e_pca = [nk_bhatta, P_bhatta, e_bhatta, pca_bhatta];

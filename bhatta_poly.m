@@ -95,10 +95,10 @@ end
 
 P1 = P(1:n1,   :);
 P2 = P(n1+1:n, :);
-P_mu1 = sum(P1,1)/n1;
-P_mu2 = sum(P2,1)/n2;
-P1c = P1 - repmat(P_mu1,n1,1);
-P2c = P2 - repmat(P_mu2,n2,1);
+p_mu1 = sum(P1,1) / n1;
+p_mu2 = sum(P2,1) / n2;
+P1c = P1 - repmat(p_mu1,n1,1);
+P2c = P2 - repmat(p_mu2,n2,1);
 Pc = [P1c; P2c];
 
 % Verification of correctness for P: K_P = K, Kc_P = Kc
@@ -115,23 +115,23 @@ end
 
 
 % Compute kernelized bhattacharrya in closed form
-P_S1 = eye(35)*z + P1c' * P1c / n1;
-P_S2 = eye(35)*z + P2c' * P2c / n2;
+p_S1 = eye(35)*z + P1c' * P1c / n1;
+p_S2 = eye(35)*z + P2c' * P2c / n2;
 
-P_mu3 = .5 * (inv(P_S1) * P_mu1' + inv(P_S2) * P_mu2')';
-P_S3 = 2 * inv(inv(P_S1) + inv(P_S1));
+p_mu3 = .5 * (inv(p_S1) * p_mu1' + inv(p_S2) * p_mu2')';
+p_S3 = 2 * inv(inv(p_S1) + inv(p_S2));
 
-p_det1 = det(P_S1)^(-.25);
-p_det2 = det(P_S2)^(-.25);
-p_det3 = det(P_S3)^(.5);
+p_det1 = det(p_S1)^(-.25);
+p_det2 = det(p_S2)^(-.25);
+p_det3 = det(p_S3)^(.5);
 
-P_det = p_det1*p_det2*p_det3;
-P_a = -.25*P_mu1*inv(P_S1)*P_mu1';
-P_b = -.25*P_mu2*inv(P_S2)*P_mu2';
-P_c = .5*P_mu3 * P_S3 * P_mu3';
-P_exp = exp(P_a + P_b + P_c);
-
-P_bhatta = P_det * P_exp
+p_det = p_det1*p_det2*p_det3;
+p_a = -.25*p_mu1*inv(p_S1)*p_mu1';
+p_b = -.25*p_mu2*inv(p_S2)*p_mu2';
+p_c = .5*p_mu3 * p_S3 * p_mu3';
+p_exp = exp(p_a + p_b + p_c);
+p_bhatta = p_det * p_exp;
+p_components = [p_det, p_exp, p_bhatta]
 
 % Now we pivot to computing the kernelized bhattacharrya using a
 % GS-basis
@@ -170,7 +170,7 @@ e_S2 = eye(n-2)*z + (G'*Kc(:,1+n1:n)*Kc(n1+1:n,:)*G)/n2;
 
 e_mu3 = (inv(e_S1) * e_mu1' + inv(e_S2) * e_mu2')'/2;
 %e_S3w = 2 * inv(e_invS1 + e_invS2);
-e_S3 = 2 * inv(inv(e_S1) + inv(e_S1));
+e_S3 = 2 * inv(inv(e_S1) + inv(e_S2));
 
 
 e_det1 = det(e_S1)^(-1/4);
@@ -184,8 +184,8 @@ e_exp3 =  e_mu3 * e_S3    * e_mu3' /2;
 e_det = e_det1 * e_det2 * e_det3;
 e_exp = exp(e_exp1 + e_exp2 + e_exp3);
 
-e_bhatta = e_det * e_exp
-e_bhatta_components = [e_det, e_exp, e_bhatta];
+e_bhatta = e_det * e_exp;
+e_components = [e_det, e_exp, e_bhatta]
 
 
 Kc1 = Kc(1:n1, 1:n1);
@@ -231,7 +231,7 @@ pca_exp3 = (pca_mu3  * pca_S3      * pca_mu3')/2;
 pca_det = pca_det1*pca_det2*pca_det3;
 pca_exp = exp(pca_exp1 + pca_exp2 + pca_exp3);
 
-pca_bhatta = pca_exp * pca_det
-pca_bhata_components = [pca_det, pca_exp, pca_bhatta];
+pca_bhatta = pca_exp * pca_det;
+pca_components = [pca_det, pca_exp, pca_bhatta]
 
-nk_P_e_pca = [nk_bhatta, P_bhatta, e_bhatta, pca_bhatta];
+nk_p_e_pca = [nk_bhatta, p_bhatta, e_bhatta, pca_bhatta];
