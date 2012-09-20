@@ -19,9 +19,6 @@ def nk_bhatta(X1, X2, eta):
     S1 = Eta + X1c.T * X1c / n1
     S2 = Eta + X2c.T * X2c / n2
 
-    #invS1 = inv(S1)
-    #invS2 = inv(S2)
-
     mu3 = .5 * (S1.I * mu1.T + S2.I * mu2.T).T
     S3  = 2  * (S1.I + S2.I).I
 
@@ -45,15 +42,17 @@ def GS_basis(Kc, n1, n2):
     G = delete(G,n1-1,1)
     for ell in xrange(n-2):
         for i in xrange(ell):
-            print (ell+1, i+1)
-            debug()
             G[:,ell] -= (G.T*Kc*G)[ell,i] * G[:,i]
-
         cf = (G.T*Kc*G)[ell,ell]
-        assert cf >= 0
+        if cf < -(10**-6):
+            print "Bad cf: " + str(cf)
+            assert 0
+        if cf < (10**-6):
+            cf = 10**-
+            print "Warning: Basis truncated"
         G[:,ell] /= cf ** .5
     GKG = G.T*Kc*G
-    #debug()
+    assert not any(isnan(G))
     #print "Divergence: " + str(sum(abs(GKG - eye(n-2,n-2))))
     return G
 
