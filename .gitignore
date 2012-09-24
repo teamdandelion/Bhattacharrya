@@ -1,3 +1,5 @@
 ~$*
 *.pyc
-*.txt
+Data/*
+Plots/*
+.DS_store
