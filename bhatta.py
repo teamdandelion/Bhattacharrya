@@ -1,10 +1,30 @@
-#!/usr/bin/env python
-
+import numpy as np
 from numpy.matlib import *
 from numpy.linalg import *
 import math
 import bhatta_poly as poly
 from pdb import set_trace as debug
+from scipy.sparse.linalg import eigsh # Lanzcos algorithm
+
+# class Bhatta_Manager:
+#     """Manage bhattacharrya evaluations of a given dataset"""
+#     def __init__(self, datasets, kernel, etas):
+#     self.data = datasets
+#     self.kernel = kernel
+#     self.etas = etas
+#     #self.K, self.Kc = self.kernel_submatrix()
+#     #self.
+
+# #    def empirical(self, otherBhatta):
+
+def empirical_bhatta(X1, X2, kernel, eta, verbose=False):
+    (n1, d) = X1.shape
+    (n2, d_) = X2.shape
+    assert (d == d_)
+
+    (Kc, G, mu1, mu2) = prepare_bhatta(X1, X2, kernel, eta, verbose=verbose)
+    (S1, S2) = e_covariance(n1, n2, Kc, G, mu1, mu2, eta)
+    return bhatta(mu1, mu2, S1, S2)
 
 def nk_bhatta(X1, X2, eta):
     # Make sure X1, X2 are matrix types
@@ -33,50 +53,68 @@ def nk_bhatta(X1, X2, eta):
 
     eterm = math.exp(e1 + e2 + e3)
 
-    return (dterm * eterm)
+    return float(dterm * eterm)
 
-def GS_basis(Kc, n1, n2):
-    n = n1 + n2
+def GS_basis(Kc, verbose=False):
+    (n, n_) = Kc.shape
+    assert n == n_
+    if verbose: print "Beginning GS process. n = {}".format(n)
     G = eye(n,n)
-    G = delete(G,n-1,1)
-    G = delete(G,n1-1,1)
-    for ell in xrange(n-2):
+    deleted = 0
+    for ell in xrange(n):
+        if verbose: 
+            if ell%10 == 0: print "ell = {}".format(ell)
+        ell -= deleted
         for i in xrange(ell):
             G[:,ell] -= (G.T*Kc*G)[ell,i] * G[:,i]
         cf = (G.T*Kc*G)[ell,ell]
-        if cf < -(10**-6):
-            print "Bad cf: " + str(cf)
-            assert 0
-        if cf < (10**-6):
-            cf = 10**-
-            print "Warning: Basis truncated"
-        G[:,ell] /= cf ** .5
+        if cf < (10**-8):
+            if verbose: print "Deleting column " + str(ell)
+            G = delete(G, ell, 1)
+            deleted += 1
+        else:
+            G[:,ell] /= cf ** .5
     GKG = G.T*Kc*G
+    (dummy, g_dim) = G.shape
     assert not any(isnan(G))
-    #print "Divergence: " + str(sum(abs(GKG - eye(n-2,n-2))))
+    if verbose: 
+        print "GKG Divergence: {:e}".format(sum(abs(GKG - eye(g_dim,g_dim))))
     return G
 
-def empirical_bhatta(X1, X2, kernel, eta):
+def prepare_bhatta(X1, X2, kernel, eta, verbose=False):
     (n1, d1) = X1.shape
     (n2, d ) = X2.shape
     assert d1 == d
     n = n1 + n2
     X = bmat('X1;X2')
     (K, Kuc, Kc) = kernel_matrix(X, kernel, n1, n2)
-    G = GS_basis(Kc, n1, n2)
+    G = GS_basis(Kc, verbose)
+    (null, g_dim) = G.shape
 
     mu1 = sum(Kuc[0:n1,:] * G,0) / n1
     mu2 = sum(Kuc[n1:n,:] * G,0) / n2
-    Eta = eye((n-2)) * eta
+
+    return (Kc, G, mu1, mu2)
+
+def e_covariance(n1, n2, Kc, G, mu1, mu2, eta):
+    (n, n_) = Kc.shape    
+    assert n == n_ == n1+n2
+    (n_, gamma) = G.shape
+
+    Eta = eye((gamma)) * eta
     S1 = Eta + G.T * Kc[:,0:n1] * Kc[0:n1, :] * G / n1
     S2 = Eta + G.T * Kc[:,n1:n] * Kc[n1:n, :] * G / n2
+
+    return (S1, S2)
+
+def bhatta(mu1, mu2, S1, S2):
 
     mu3 = (S1.I * mu1.T + S2.I * mu2.T).T * .5
     S3 = 2 * (S1.I + S2.I).I
 
-    d1 = det(S1) ** -.25
-    d2 = det(S2) ** -.25
-    d3 = det(S3) ** .5
+    d1 = abs(det(S1)) ** -.25
+    d2 = abs(det(S2)) ** -.25
+    d3 = abs(det(S3)) ** .5
     dterm = d1*d2*d3
 
     e1 = mu1 * S1.I * mu1.T * -.25
@@ -84,7 +122,34 @@ def empirical_bhatta(X1, X2, kernel, eta):
     e3 = mu3 * S3   * mu3.T * .5
     eterm = exp(e1 + e2 + e3)
 
-    return dterm * eterm
+    assert not(isnan(dterm*eterm))
+    
+    return float(dterm * eterm)
+
+def pca_covariance(n1, n2, Kc, G, mu1, mu2, eta, r):
+    # Completely untested
+    Kc1 = Kc[0:n1, 0:n1]
+    Kc2 = Kc[n1:n, n1:n]
+    (Lam1, Alpha1) = eigsh(Kc1, r)
+    (Lam2, Alpha2) = eigsh(Kc2, r)
+    Alpha1 = matrix(Alpha1)
+    Alpha2 = matrix(Alpha2)
+    Lam1 = matrix(Lam1 / n1)
+    Lam2 = matrix(Lam2 / n2)
+    Beta1 = zeros(n,r)
+    Beta2 = zeros(n,r)
+
+    for i in xrange(r):
+        Beta1[0:n1, i] = Alpha1[:,i] / (n1 * Lam1[i])
+        Beta2[n1:n, i] = Alpha2[:,i] / (n2 * Lam2[i])
+
+    Eta = eye((gamma, gamma)) * eta # consider moving this to prep
+    S1 = (G.T*Kc*Beta1) * diag(Lam1) * (G.T*Kc*Beta1).T
+    S2 = (G.T*Kc*Beta2) * diag(Lam2) * (G.T*Kc*Beta2).T
+    S1 += Eta
+    S2 += Eta
+
+    return (S1, S2)
 
 def kernel_matrix(X, kernel, n1, n2):
     (n, d) = X.shape
@@ -156,14 +221,15 @@ def verify_kernel_matrix():
     print "Div3: " + str(sum(abs(Kc-KcP)))
 
 def test_suite_1():
-    n1 = 15
-    n2 = 15
+    n1 = 20
+    n2 = 20
     n = n1+n2
     d = 5
-    eta = 1
+    eta = .1
     degree = 3
-    iterations = 10
-    results = zeros((8,3)) 
+    iterations = 20
+    results = zeros((8,4)) 
+    sigma = 2
     # 1st col is non-kernelized
     # 2nd col is poly-kernel 
 
@@ -196,6 +262,7 @@ def test_suite_1():
             Phi_D = poly.phi(D, degree)
             results[idx, 1] += nk_bhatta(Phi_X, Phi_D, eta)
             results[idx, 2] += empirical_bhatta(X, D, polyk(degree), eta)
+            results[idx, 3] += empirical_bhatta(X, D, gaussk(sigma), eta)
     results /= iterations
 
     return results
@@ -206,10 +273,10 @@ def dotp(x,y):
 def polyk(degree):
     return lambda x,y: dotp(x,y)**degree 
 
-def main():
-    res = test_suite_1()
-    print res
+def gaussk(sigma):
+    return lambda X,Y: gaussian_kernel(X,Y,sigma)
 
-if __name__ == '__main__':
-    main()
+def gaussian_kernel(X,Y,sigma):
+    return exp( -norm(X-Y)**2 / (2 * sigma**2))
+
 
