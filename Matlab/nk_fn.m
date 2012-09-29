@@ -1,11 +1,7 @@
 % Non-kernelized Bhattacharrya
-function [ nk_bhatta ] = nk_bhatta( X1,X2 )
+function [ nk_bhatta ] = nk_fn( X1,X2 )
 %UNTITLED2 Summary of this function goes here
 %   Detailed explanation goes here
-
-
-[n1, dummy] = size(X1);
-[n2, dummy] = size(X2);
 
 nk_mu1 = sum(X1)/n1; % results in a 1xd row vector
 nk_mu2 = sum(X2)/n2;
