@@ -21,10 +21,12 @@ def empirical_bhatta(X1, X2, kernel, eta, verbose=False):
     (n1, d) = X1.shape
     (n2, d_) = X2.shape
     assert (d == d_)
-
-    (Kc, G, mu1, mu2) = prepare_bhatta(X1, X2, kernel, eta, verbose=verbose)
-    (S1, S2) = e_covariance(n1, n2, Kc, G, mu1, mu2, eta)
-    return bhatta(mu1, mu2, S1, S2)
+    try:
+        (Kc, G, mu1, mu2) = prepare_bhatta(X1, X2, kernel, eta, verbose=verbose)
+        (S1, S2) = e_covariance(n1, n2, Kc, G, mu1, mu2, eta)
+        return bhatta(mu1, mu2, S1, S2)
+    except AssertionError:
+        return -1
 
 def nk_bhatta(X1, X2, eta):
     # Make sure X1, X2 are matrix types
@@ -151,6 +153,92 @@ def pca_covariance(n1, n2, Kc, G, mu1, mu2, eta, r):
 
     return (S1, S2)
 
+
+def makediag(M):
+    (c,) = M.shape
+    D = zeros((c,c))
+    for i in xrange(c):
+        D[i,i] = M[i]
+    return D
+
+def eig_bhatta(X1, X2, kernel, eta, r):
+    # Not tested in the slightest ... probably all broken
+
+    # Make Kc1, Kc2
+    # U1.T * S1 * U1
+    (n1, d1) = X1.shape
+    (n2, d2) = X2.shape
+    assert d1==d2
+    n = n1+n2
+    X = bmat("X1;X2")
+    (K, Kuc, Kc) = kernel_matrix(X, kernel, n1, n2)
+    Kc1 = Kc[0:n1, 0:n1]
+    Kc2 = Kc[n1:n, n1:n]
+
+    (Lam1, Alpha1) = eigsh(Kc1, r)
+    (Lam2, Alpha2) = eigsh(Kc2, r)
+    Alpha1 = matrix(Alpha1)
+    Alpha2 = matrix(Alpha2)
+    Lam1 = Lam1 / n1
+    Lam2 = Lam2 / n2
+    Beta1 = zeros((n,r))
+    Beta2 = zeros((n,r))
+
+    for i in xrange(r):
+        Beta1[0:n1, i]   = Alpha1[:,i] / (n1 * Lam1[i])
+        Beta2[n1:n, i] = Alpha2[:,i] / (n2 * Lam2[i])
+
+    #Eta = eye((gamma, gamma)) * eta
+    Beta = bmat('Beta1, Beta2')
+    mu1_e = sum(Kuc[0:n1, :] * Beta1, 0) / n1
+    mu2_e = sum(Kuc[n1:n, :] * Beta2, 0) / n2
+
+    Eta_e = eta * eye(r)
+    Eta_r = eta * eye(2*r)
+    S1_e = makediag(Lam1) + Eta_e
+    S2_e = makediag(Lam2) + Eta_e
+
+    d1 = product(Lam1 + eta) ** -.25
+    d2 = product(Lam2 + eta) ** -.25
+
+    e1 = exp(-mu1_e * S1_e.I * mu1_e.T / 4)
+    e2 = exp(-mu2_e * S2_e.I * mu2_e.T / 4)
+
+    (Q,R) = qr(Beta)
+    #Q : (n x 2r) R : (2r x 2r)
+    mu1_r = zeros((1,2*r))
+    mu2_r = zeros((1,2*r))
+    mu1_r[0,0:r] = mu1_e
+    mu2_r[0,0:r] = mu2_e
+    mu1_r = (R * mu1_r.T).T
+    mu2_r = (R * mu2_r.T).T
+
+    S1_r = zeros((2*r,2*r))
+    S2_r = zeros((2*r,2*r))
+    S1_r[0:r,0:r] = makediag(Lam1)
+    S2_r[r:2*r, r:2*r] = makediag(Lam2)
+    S1_r = R * S1_r + Eta_r * R.T # Figure it out
+    S2_r = R * S2_r + Eta_r * R.T # Figure it out too
+
+    mu3_r = .5 * (S1_r.I * mu1_r.T + S2_r.I * mu2_r.T).T
+    S3 = 2 * (S1_r.I + S2_r.I).I
+
+    d3 = det(S3) ** .5
+    e3 = exp(mu3_r * S3 * mu3_r.T / 2)
+
+    try:
+        assert not(isnan(d1*d2*d3*e1*e2*e3))
+        rval = d1*d2*d3*e1*e2*e3
+    except AssertionError:
+        rval = -1
+
+    print rval
+
+    return rval
+
+    
+
+
 def kernel_matrix(X, kernel, n1, n2):
     (n, d) = X.shape
     assert n == n1 + n2
@@ -266,6 +354,7 @@ def test_suite_1():
     results /= iterations
 
     return results
+
 
 def dotp(x,y):
     return float(inner(x,y))

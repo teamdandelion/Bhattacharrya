@@ -64,7 +64,7 @@ def plot_kernels((X1, gen1), (X2, gen2),
         for sigma in sigmas:
             if verbose: print "Evaluating {:s} for e={:.2f} s={:.2f}"\
                 .format(title_text, eta, sigma)
-            kappa = bhatta.empirical_bhatta(X1, X2, bhatta.gaussk(sigma), eta, verbose=verbose)
+            kappa = bhatta.eig_bhatta(X1, X2, bhatta.gaussk(sigma), eta, 5)
             sig_vals.append(kappa)
         table_vals.append(sig_vals)
 
