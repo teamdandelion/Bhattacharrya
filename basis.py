@@ -7,6 +7,23 @@ def cdot(a,b):
     return float(a.T*b)
 
 
+def decompose(V):
+    (r,c) = V.shape
+    W = V.copy()
+    G = eye(c)
+    for i in xrange(c):
+        for j in xrange(i):
+            cf = cdot(W[:,i], W[:,i])
+            G[:,i] -= cf * G[:,j]
+            W[:,i] -= cf * W[:,j]
+        nf = cdot(W[:,i], W[:,i]) ** (.5)
+        G[:,i] /= nf
+        W[:,i] /= nf
+
+    return W,G
+
+
+
 def orthogonalize(M):
     (r,c) = M.shape
     O = M.copy()
@@ -19,14 +36,28 @@ def orthogonalize(M):
 
     return O
 
+def is_normal(M):
+    (r,c) = M.shape
+    try:
+        for i in xrange(c):
+            assert cdot(M[:,i],M[:,i]) - 1 < .000001
+        return 1
+    except AssertionError:
+        return 0
+
 def is_ortho(M):
     (r,c) = M.shape
-    good = 1
-    for i in xrange(c):
-        if cdot(M[:,i],M[:,i]) - 1 > .001:
-            good = 0
-            assert good==1
-    return good
+    try:
+        for i in xrange(c):
+            for j in xrange(i):
+                assert cdot(M[:,i],M[:,j]) < .000001
+        return 1
+    except AssertionError:
+        return 0
+
+def is_on(M):
+    return is_ortho(M) and is_normal(M)
+
 
 A = mat("1., 0., 0.; 1., 1., 0.; 0., 0., 1.")
 B = orthogonalize(A)
