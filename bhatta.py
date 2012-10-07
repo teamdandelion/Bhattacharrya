@@ -1,9 +1,9 @@
+#!/usr/bin/env python
 import numpy as np
 from numpy.matlib import *
 from numpy.linalg import *
 import math
 import bhatta_poly as poly
-from pdb import set_trace as debug
 from scipy.sparse.linalg import eigsh # Lanzcos algorithm
 
 # class Bhatta_Manager:
@@ -83,6 +83,25 @@ def GS_basis(Kc, verbose=False):
         print "GKG Divergence: {:e}".format(sum(abs(GKG - eye(g_dim,g_dim))))
     return G
 
+
+def eig_ortho(Kc, Beta):
+    (n, rr) = Beta.shape
+    # rr literally stands for '2r'
+    (n_, n__) = Kc.shape
+    assert n == n_ == n__
+    Gamma = eye(rr)
+    for i in xrange(rr):
+        for j in xrange(i):
+            W = Beta * Gamma
+            g = W.T[i,:] * Kc * W[:,j]
+            g = float(g)
+            Gamma[:,i] -= g * Gamma[:,j]
+        W = Beta * Gamma
+        nrm = W.T[i,:] * Kc * W[:,i]
+        nrm = float(nrm) ** .5
+        Gamma[:,i] /= nrm
+    return Gamma
+
 def prepare_bhatta(X1, X2, kernel, eta, verbose=False):
     (n1, d1) = X1.shape
     (n2, d ) = X2.shape
@@ -109,7 +128,7 @@ def e_covariance(n1, n2, Kc, G, mu1, mu2, eta):
 
     return (S1, S2)
 
-def bhatta(mu1, mu2, S1, S2):
+def normal_overlap(mu1, mu2, S1, S2):
 
     mu3 = (S1.I * mu1.T + S2.I * mu2.T).T * .5
     S3 = 2 * (S1.I + S2.I).I
@@ -171,7 +190,7 @@ def eig_bhatta(X1, X2, kernel, eta, r):
     assert d1==d2
     n = n1+n2
     X = bmat("X1;X2")
-    (K, Kuc, Kc) = kernel_matrix(X, kernel, n1, n2)
+    (K, Kuc, Kc) = bhatta.kernel_matrix(X, kernel, n1, n2)
     Kc1 = Kc[0:n1, 0:n1]
     Kc2 = Kc[n1:n, n1:n]
 
@@ -185,54 +204,41 @@ def eig_bhatta(X1, X2, kernel, eta, r):
     Beta2 = zeros((n,r))
 
     for i in xrange(r):
-        Beta1[0:n1, i]   = Alpha1[:,i] / (n1 * Lam1[i])
-        Beta2[n1:n, i] = Alpha2[:,i] / (n2 * Lam2[i])
+        Beta1[0:n1, i] = Alpha1[:,i] / (n1 * Lam1[i])**.5
+        Beta2[n1:n, i] = Alpha2[:,i] / (n2 * Lam2[i])**.5
+
 
     #Eta = eye((gamma, gamma)) * eta
     Beta = bmat('Beta1, Beta2')
-    mu1_e = sum(Kuc[0:n1, :] * Beta1, 0) / n1
-    mu2_e = sum(Kuc[n1:n, :] * Beta2, 0) / n2
+    Gamma = eig_ortho(Kc, Beta)
+    Omega = Beta * Gamma
+    mu1_w = sum(Kuc[0:n1, :] * Omega, 0) / n1
+    mu2_w = sum(Kuc[n1:n, :] * Omega, 0) / n2
 
-    Eta_e = eta * eye(r)
-    Eta_r = eta * eye(2*r)
-    S1_e = makediag(Lam1) + Eta_e
-    S2_e = makediag(Lam2) + Eta_e
+    Eta_w = eta * eye(2*r)    
 
-    d1 = product(Lam1 + eta) ** -.25
-    d2 = product(Lam2 + eta) ** -.25
+    S1_w = Omega.T * Kc[:,0:n1] * Kc[0:n1,:] * Omega / n1
+    S2_w = Omega.T * Kc[:,n1:n] * Kc[n1:n,:] * Omega / n2
+    S1_w += Eta_w
+    S2_w += Eta_w
 
-    e1 = exp(-mu1_e * S1_e.I * mu1_e.T / 4)
-    e2 = exp(-mu2_e * S2_e.I * mu2_e.T / 4)
+    mu3_w = .5 * (S1_w.I * mu1_w.T + S2_w.I * mu2_w.T).T
+    S3_w = 2 * (S1_w.I + S2_w.I).I
 
-    (Q,R) = qr(Beta)
-    #Q : (n x 2r) R : (2r x 2r)
-    mu1_r = zeros((1,2*r))
-    mu2_r = zeros((1,2*r))
-    mu1_r[0,0:r] = mu1_e
-    mu2_r[0,0:r] = mu2_e
-    mu1_r = (R * mu1_r.T).T
-    mu2_r = (R * mu2_r.T).T
+    d1 = det(S1_w) ** -.25
+    d2 = det(S2_w) ** -.25
 
-    S1_r = zeros((2*r,2*r))
-    S2_r = zeros((2*r,2*r))
-    S1_r[0:r,0:r] = makediag(Lam1)
-    S2_r[r:2*r, r:2*r] = makediag(Lam2)
-    S1_r = R * S1_r + Eta_r * R.T # Figure it out
-    S2_r = R * S2_r + Eta_r * R.T # Figure it out too
+    e1 = exp(-mu1_w * S1_w.I * mu1_w.T / 4)
+    e2 = exp(-mu2_w * S2_w.I * mu2_w.T / 4)
+    d3 = det(S3_w) ** .5
+    e3 = exp(mu3_w * S3_w * mu3_w.T / 2)
 
-    mu3_r = .5 * (S1_r.I * mu1_r.T + S2_r.I * mu2_r.T).T
-    S3 = 2 * (S1_r.I + S2_r.I).I
+    dterm = d1*d2*d3
+    eterm = e1*e2*e3
+    rval = dterm*eterm
 
-    d3 = det(S3) ** .5
-    e3 = exp(mu3_r * S3 * mu3_r.T / 2)
-
-    try:
-        assert not(isnan(d1*d2*d3*e1*e2*e3))
-        rval = d1*d2*d3*e1*e2*e3
-    except AssertionError:
+    if isnan(rval):
         rval = -1
-
-    print rval
 
     return rval
 
@@ -316,7 +322,7 @@ def test_suite_1():
     eta = .1
     degree = 3
     iterations = 20
-    results = zeros((8,4)) 
+    results = zeros((8,5)) 
     sigma = 2
     # 1st col is non-kernelized
     # 2nd col is poly-kernel 
@@ -351,6 +357,7 @@ def test_suite_1():
             results[idx, 1] += nk_bhatta(Phi_X, Phi_D, eta)
             results[idx, 2] += empirical_bhatta(X, D, polyk(degree), eta)
             results[idx, 3] += empirical_bhatta(X, D, gaussk(sigma), eta)
+            results[idx, 4] += eig_bhatta(X,D,gaussk(sigma),eta,5)
     results /= iterations
 
     return results
@@ -367,5 +374,21 @@ def gaussk(sigma):
 
 def gaussian_kernel(X,Y,sigma):
     return exp( -norm(X-Y)**2 / (2 * sigma**2))
+
+## Debugging Area
+
+
+
+###
+
+
+def main():
+    X1 = randn(20,6)
+    X2 = randn(20,6)
+    deg = 3
+    poly.eig_poly(X1, X2, deg, .1, 5)
+
+if __name__ == '__main__':
+    main()
 
 
