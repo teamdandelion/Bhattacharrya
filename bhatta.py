@@ -5,17 +5,67 @@ from numpy.linalg import *
 import math
 import bhatta_poly as poly
 from scipy.sparse.linalg import eigsh # Lanzcos algorithm
+import time
 
-# class Bhatta_Manager:
-#     """Manage bhattacharrya evaluations of a given dataset"""
-#     def __init__(self, datasets, kernel, etas):
-#     self.data = datasets
-#     self.kernel = kernel
-#     self.etas = etas
-#     #self.K, self.Kc = self.kernel_submatrix()
-#     #self.
+class Bhatta_Manager:
+    def __init__(self, Data, kernel, r, etas):
+        # Data = [X1, X2, X3]...
+        # X1 = (n1 x d) matrix, each row is a length-d vector
+        # kernel: positive-semidefinite kernel
+        # r: number of eigenvectors to use, r < min(n1, n2...)
+        # etas: [eta1, eta2, eta3] normalization factors
+        self.datasets = []
+        for D in Data:
+            self.datasets.append(Dataset(D,self))
 
-# #    def empirical(self, otherBhatta):
+    def eig_bhatta(D1, D2):
+    # Invariant: D1 and D2 have been supplied with the same kernel and
+    # the same value for r. Th
+
+
+class Dataset:
+    """Manage bhattacharrya evaluations of a given dataset"""
+    def __init__(self, X, manager):
+        self.X = X
+        self.kernel = manager.kernel
+        self.r = manager.r
+        self.K, self.Kc = self.kernel_submatrix()
+        self.Beta = self.gen_beta()
+        # 's' stands for 'sub' - to indicate it is a submatrix
+        # rather than a full matrix which combines 2 datasets
+
+    def kernel_submatrix(self):
+        X = self.X
+        (n,d) = X.shape
+        K = zeros((n,n))
+        for i in xrange(n):
+            for j in xrange(i+1):
+                K[i,j] = self.kernel(X[i,:], X[j,:])
+                K[j,i] = K[i,j]
+
+        Ki = sum(K,1) / n
+        k  = sum(K) / (n*n)
+        Kc = K - Ki*ones((1,n)) - ones((n,1)) * Ki.T + k*ones((n,n))
+        return (K, Kc)
+
+    def gen_beta(self):
+        (n,n_) = self.Kc.shape
+        (Lam, Alpha) = eigsh(self.Kc, self.r)
+        Alpha = matrix(Alpha)
+        Lam = Lam / n
+        def greater_than_zero(x): return x>0
+        assert all(map(greater_than_zero,Lam))
+
+        Beta = zeros((n,self.r))
+        for i in xrange(self.r):
+            Beta[:, i] = Alpha[:,i] / (n * Lam[i])**.5
+
+        return Beta
+
+
+
+
+
 
 def empirical_bhatta(X1, X2, kernel, eta, verbose=False):
     (n1, d) = X1.shape
@@ -24,7 +74,7 @@ def empirical_bhatta(X1, X2, kernel, eta, verbose=False):
     try:
         (Kc, G, mu1, mu2) = prepare_bhatta(X1, X2, kernel, eta, verbose=verbose)
         (S1, S2) = e_covariance(n1, n2, Kc, G, mu1, mu2, eta)
-        return bhatta(mu1, mu2, S1, S2)
+        return bhatta_composition(mu1, mu2, S1, S2)
     except AssertionError:
         return -1
 
@@ -98,6 +148,7 @@ def eig_ortho(Kc, Beta):
             Gamma[:,i] -= g * Gamma[:,j]
         W = Beta * Gamma
         nrm = W.T[i,:] * Kc * W[:,i]
+        assert float(nrm) > 0
         nrm = float(nrm) ** .5
         Gamma[:,i] /= nrm
     return Gamma
@@ -128,7 +179,7 @@ def e_covariance(n1, n2, Kc, G, mu1, mu2, eta):
 
     return (S1, S2)
 
-def normal_overlap(mu1, mu2, S1, S2):
+def bhatta_composition(mu1, mu2, S1, S2):
 
     mu3 = (S1.I * mu1.T + S2.I * mu2.T).T * .5
     S3 = 2 * (S1.I + S2.I).I
@@ -181,16 +232,18 @@ def makediag(M):
     return D
 
 def eig_bhatta(X1, X2, kernel, eta, r):
-    # Not tested in the slightest ... probably all broken
-
-    # Make Kc1, Kc2
-    # U1.T * S1 * U1
+    # Tested. Verified:
+    # Poly-kernel RKHS representations of all objects are roughly equal to eigenbasis representations (slight differences for S3)
+    # Correctness for X1 ~= X2
+    # Close results to empirical bhatta in test_suite_1
+    # Remaining issues: Eigendecomposition of centered kernel matrices
+    # occasionally produces negative-value eigenvalues
     (n1, d1) = X1.shape
     (n2, d2) = X2.shape
     assert d1==d2
     n = n1+n2
     X = bmat("X1;X2")
-    (K, Kuc, Kc) = bhatta.kernel_matrix(X, kernel, n1, n2)
+    (K, Kuc, Kc) = kernel_matrix(X, kernel, n1, n2)
     Kc1 = Kc[0:n1, 0:n1]
     Kc2 = Kc[n1:n, n1:n]
 
@@ -210,6 +263,7 @@ def eig_bhatta(X1, X2, kernel, eta, r):
 
     #Eta = eye((gamma, gamma)) * eta
     Beta = bmat('Beta1, Beta2')
+    assert not(any(isnan(Beta)))
     Gamma = eig_ortho(Kc, Beta)
     Omega = Beta * Gamma
     mu1_w = sum(Kuc[0:n1, :] * Omega, 0) / n1
@@ -241,9 +295,6 @@ def eig_bhatta(X1, X2, kernel, eta, r):
         rval = -1
 
     return rval
-
-    
-
 
 def kernel_matrix(X, kernel, n1, n2):
     (n, d) = X.shape
@@ -315,14 +366,15 @@ def verify_kernel_matrix():
     print "Div3: " + str(sum(abs(Kc-KcP)))
 
 def test_suite_1():
-    n1 = 20
-    n2 = 20
+    n1 = 100
+    n2 = 100
     n = n1+n2
     d = 5
     eta = .1
     degree = 3
-    iterations = 20
+    iterations = 1
     results = zeros((8,5)) 
+    times = zeros((1,5))
     sigma = 2
     # 1st col is non-kernelized
     # 2nd col is poly-kernel 
@@ -350,15 +402,34 @@ def test_suite_1():
 
         Data = [D0, D1, D2, D3, D4, D5, D6, D7]
 
+
         for idx in xrange(8):
             D = Data[idx]
+            start = time.time()
             results[idx, 0] += nk_bhatta(X, D, 0)
-            Phi_D = poly.phi(D, degree)
-            results[idx, 1] += nk_bhatta(Phi_X, Phi_D, eta)
-            results[idx, 2] += empirical_bhatta(X, D, polyk(degree), eta)
-            results[idx, 3] += empirical_bhatta(X, D, gaussk(sigma), eta)
-            results[idx, 4] += eig_bhatta(X,D,gaussk(sigma),eta,5)
+            nk = time.time()
+            results[idx, 4] += empirical_bhatta(X, D, gaussk(sigma), eta)
+            emp = time.time()
+            results[idx, 1] += eig_bhatta(X,D,gaussk(sigma),eta,5)
+            e5 = time.time()
+            results[idx, 2] += eig_bhatta(X,D,gaussk(sigma),eta,15)
+            e15 = time.time()
+            results[idx, 3] += eig_bhatta(X,D,gaussk(sigma),eta,25)
+            e25 = time.time()
+            nktime = nk-start
+            emptime = emp-nk
+            e5time = e5-emp
+            e15time = e15-e5
+            e25time = e25-e15
+            print "nk: {:.1f}, emp: {:.1f}, e5: {:.1f}, e15: {:.1f}, e25: {:.1f}".format(nktime, emptime, e5time, e15time, e25time)
+            times[0,0]+= nktime
+            times[0,4]+= emptime
+            times[0,1]+= e5time
+            times[0,2]+= e15time
+            times[0,3]+= e25time
     results /= iterations
+    print results
+    print times
 
     return results
 
@@ -383,10 +454,7 @@ def gaussian_kernel(X,Y,sigma):
 
 
 def main():
-    X1 = randn(20,6)
-    X2 = randn(20,6)
-    deg = 3
-    poly.eig_poly(X1, X2, deg, .1, 5)
+    test_suite_1()
 
 if __name__ == '__main__':
     main()
