@@ -3,3 +3,4 @@
 Data/*
 Plots/*
 .DS_store
+*.pkl*
