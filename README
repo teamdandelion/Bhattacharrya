@@ -1,0 +1,8 @@
+Implements the Bhattacharrya Kernel in Python and Matlab.
+
+"bhatta.py" contains the kernel. This is the main file
+"basis.py" contains some helper functions
+"bhatta_plots.py" is a utility for vizualising kernel evaluations between datasets
+"mnist.py" handles loading the MNIST digit database and vectorizing it into a form the Bhattacharrya kernel can handle
+"bhatta_poly" contains utilities to explicitly discover the polynomial feature space, for bugtesting the kernel and confirming correctness
+"Matlab/" contains Matlab versions of the kernel; may not be correct atm

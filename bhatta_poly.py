@@ -111,6 +111,8 @@ def eig_poly(X1, X2, deg, eta, r):
     Alpha2 = matrix(Alpha2)
     Lam1 = Lam1 / n1
     Lam2 = Lam2 / n2
+    Lam1 += eta
+    Lam2 += eta
     Beta1 = zeros((n,r))
     Beta2 = zeros((n,r))
 
@@ -132,8 +134,8 @@ def eig_poly(X1, X2, deg, eta, r):
     mu1_w = sum(Kuc[0:n1, :] * Omega, 0) / n1
     mu2_w = sum(Kuc[n1:n, :] * Omega, 0) / n2
 
-    Eta_v = eta * eye(r)
-    Eta_w = eta * eye(2*r)
+    Eta_v = 0 * eye(r)
+    Eta_w = 0 * eye(2*r)
     S1_v = makediag(Lam1) + Eta_v
     S2_v = makediag(Lam2) + Eta_v
 
@@ -177,7 +179,7 @@ def main():
     X1 = randn(20,6)
     X2 = randn(20,6)
     deg = 3
-    (explicit, eigen) = eig_poly(X1, X2, deg, .1, 19)
+    (explicit, eigen) = eig_poly(X1, X2, deg, .1, 15)
     print explicit, eigen
 
 if __name__ == '__main__':

@@ -8,11 +8,66 @@ import matplotlib.pyplot as plt
 from pdb import set_trace as debug
 import bhatta
 import os
+import cPickle
+
+
+def vim2xyz(vimg):
+    vimg = np.array(vimg)
+    x = vimg[:,0]
+    y = vimg[:,1]
+    z = vimg[:,2]
+    #x = np.array(x)
+    #y = np.array(y)
+    #z = np.array(z)
+    return (x,y,z)
+
+def plotvim(vimg):
+    (x,y,z) = vim2xyz(vimg)
+    plt.scatter(x,y,c=-z,s=120, marker='s')
+    plt.gray()
+    plt.show()
+
+def plot_mnist_BM():
+    with open('vim_BM.pkl', 'r') as f:
+        BM = cPickle.load(f)
+
+    with open('vectorized_mnist.pkl', 'r') as f:
+        (vim, labels) = cPickle.load(f)
+
+    for i in xrange(20):
+        for j in xrange(i):
+            k = BM[i,j]
+            li = labels[i]
+            lj = labels[j]
+            title = "{}:{},{}:{} k = {:.2f}".format(i,li,j,li,k)
+            D1 = vim[i]
+            D2 = vim[j]
+            savefile = "vim_{:2d}-{:2d}".format(i,j)
+            plot2data(D1,D2,title,savefile=savefile)
+
+def plot2data(D1, D2, title_text, xrnge=(0,28), yrnge=(0,28), savefile=0):
+    #D1: (n1 x 3) matrix
+    (x1, y1, z1) = vim2xyz(D1)
+    (x2, y2, z2) = vim2xyz(D2)
+    plt.scatter(x1,y1,c='r',marker='s',s=z1*100)
+    plt.scatter(x2,y2,c='b',marker='o',s=z2*100)
+    plt.axis = (xrnge, yrnge)
+
+    plt.title(title_text)
+    #plt.text(kval_x, kval_y, kvals)
+    if savefile == 0:
+        plt.show()
+    else:
+        plt.savefig("./Plots/" + savefile + ".pdf")
+        print "Saved " + savefile
+
+
+
 
 def plot_distribution_suite(size=100, verbose=False):
     dists = []
-    d0 = mvnorm([0,0], [1, 0, -1, -1], size)
-    d1 = mvnorm([1,1], [1, 0, -1, -1], size)
+    d0 = mvnorm([0,0], [1, -.5, -.5, -1], size)
+    d1 = mvnorm([1,1], [1, .2, .2, -1], size)
     d2 = mvnorm([0,0], [1, -.5, -.5,.3], size)
     d3 = mvnorm([-1,1], [1, 0, -1, -1], size)
     d4 = mvnorm([0,0], [-1.5, 2, 2, 3], size)
@@ -64,7 +119,7 @@ def plot_kernels((X1, gen1), (X2, gen2),
         for sigma in sigmas:
             if verbose: print "Evaluating {:s} for e={:.2f} s={:.2f}"\
                 .format(title_text, eta, sigma)
-            kappa = bhatta.eig_bhatta(X1, X2, bhatta.gaussk(sigma), eta, 5)
+            kappa = bhatta.eig_bhatta(X1, X2, bhatta.gaussk(sigma), eta, 25)
             sig_vals.append(kappa)
         table_vals.append(sig_vals)
 
@@ -138,7 +193,38 @@ def ensure(dir):
         os.makedirs(dir)
 
 def main():
-    plot_distribution_suite(100, True)
+    plot_mnist_BM()
 
 if __name__ == '__main__':
     main()
+
+
+# def plot2data(D1, D2, title, row_names, col_names, table_vals, xrnge=(0,28), yrnge=(0,28), savefile=0):
+#     #D1: (n1 x 3) matrix
+#     (x1, y1, z1) = vim2xyz(D1)
+#     (x2, y2, z2) = vim2xyz(D2)
+#     plt.scatter(x1,y1,c='r',marker='s',size=150)
+#     plt.scatter(x2,y2,c='b',marker='o',size=80)
+#     plt.axis = (xrnge, yrnge)
+
+#     n_rows, n_cols = table_vals.shape
+
+#     table_text = []
+#     for row in xrange(n_rows):
+#         newtext = []
+#         for col in xrange(n_cols):
+#             val = table_vals[row,col]
+#             newtext.append('{:.2f}'.format(val).lstrip('0'))
+#         table_text.append(newtext)
+
+#     the_table = plt.table(cellText=table_text,
+#                   rowLabels=row_names,
+#                   colLabels=col_names,
+#                   colWidths = [.1]*n_cols,
+#                   loc='upper right')
+#         plt.title(title_text)
+#     #plt.text(kval_x, kval_y, kvals)
+#     if savefile == 0:
+#         plt.show()
+#     else:
+#         plt.savefig("./Plots/" + savefile + ".pdf")

@@ -1,8 +1,10 @@
 import cPickle, gzip, numpy
 
 # Load the dataset
-with gzip.open('mnist.pkl.gz', 'rb') as f:
-    train_set, valid_set, test_set = cPickle.load(f)
+def load_mnist():
+    with gzip.open('mnist.pkl.gz', 'rb') as f:
+        train_set, valid_set, test_set = cPickle.load(f)
+    return (train_set, valid_set, test_set)
 
 
 def vectorize_images(imgs):
@@ -13,15 +15,18 @@ def vectorize_images(imgs):
         img = []
         for j in xrange(784):
             if imgs[i,j] > 0:
-                img.append([j//28, j%28, imgs[i,j]])
+                img.append([j%28, 28-j//28, imgs[i,j]])
         vectorized_images.append(numpy.matrix(img))
     return vectorized_images
 
-with open('vectorized_mnst.pkl', 'w') as f:
+def save_vectorize():
     vim = vectorize_images(train_set[0][0:20,:])
-    cPickle.dump(vim, f)
+    with open('vectorized_mnist.pkl', 'w') as f:
+        cPickle.dump(vim, f)
 
 
 
-
-
+def main():
+    mnist_imgs = load_mnist()
+    vim = vectorize_images(mnist_imgs[0][0][0:20,:])
+    return (mnist_imgs, vim)
