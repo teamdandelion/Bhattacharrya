@@ -1,38 +1,137 @@
 #!/usr/bin/env python
 import numpy as np
-from numpy.matlib import *
-from numpy.linalg import *
-import math
+import numpy.matlib as mat
+import numpy.linalg as la
+import math, hashlib, time, cPickle
 import bhatta_poly as poly
 from scipy.sparse.linalg import eigsh # Lanzcos algorithm
-import time
+
+def Bhattacharrya_Kernel_Matrix(Data, kernel, eta, r):
+    """Efficiently computes the Bhattacharrya kernel matrix for several datasets. M[i,j] = K(D[i], D[j])
+    If all (or a large portion) of the matrix will be used, this is more efficient than calling the bhattacharrya kernel on its own.
+    This function is a wrapper to the Bhatta_Manager class."""
+    manager = Bhatta_Manager(Data, kernel, eta, r)
+    return manager.bhatta_matrix()
 
 class Bhatta_Manager:
-    def __init__(self, Data, kernel, r, etas):
+    """The goal of the Bhatta_Manager class is to handle a large number of Bhattacharrya kernel evaluations efficiently.
+    It takes a list of datasets (D), where each dataset is expressed as a (n_i x d) matrix where each row is a data vector
+    It precomputes the eigenvector decomposition of each dataset's covariance matrix, etc
+    Parameters: eta = regularization parameter (try .1 to 1), r = number of eigenvectors (must be less than min(n_i))"""
+    def __init__(self, Data, kernel, eta, r):
         # Data = [X1, X2, X3]...
-        # X1 = (n1 x d) matrix, each row is a length-d vector
         # kernel: positive-semidefinite kernel
         # r: number of eigenvectors to use, r < min(n1, n2...)
         # etas: [eta1, eta2, eta3] normalization factors
-        self.datasets = []
-        for D in Data:
-            self.datasets.append(Dataset(D,self))
+        self.kernel = kernel
+        self.r = r
+        self.eta = eta
+        self.datasets = map(Dataset, Data)
 
-    def eig_bhatta(D1, D2):
-    # Invariant: D1 and D2 have been supplied with the same kernel and
-    # the same value for r. Th
+    def bhatta_matrix(self):
+        """Returns a matrix of Bhattacharrya kernel evaluations between datasets"""
+        n = len(self.datasets)
+        BM = eye(n)
+        for i in xrange(n):
+            for j in xrange(i):
+                BM[i,j] = self.bhatta(i,j)
+                BM[j,i] = BM[i,j]
+        return BM
+
+    def bhatta(self,i,j):
+        eta = self.eta
+        D1 = self.datasets[i]
+        D2 = self.datasets[j]
+        Beta1 = D1.Beta
+        Beta2 = D2.Beta
+        (n1, r) = Beta1.shape
+        (n2, r) = Beta2.shape
+        n = n1 + n2
+        Beta = zeros((n,2*r))
+        Beta[0:n1,0:r] = Beta1
+        Beta[n1:n,r:2*r] = Beta2
+        (K, Kuc, Kc) = self.kernel_supermatrix(i,j)
+        Omega = eig_ortho(Kc, Beta)
+        mu1 = sum(Kuc[0:n1, :] * Omega, 0) / n1
+        mu2 = sum(Kuc[n1:n, :] * Omega, 0) / n2
+
+        S1 = Omega.T * Kc[:,0:n1] * Kc[0:n1,:] * Omega / n1
+        S2 = Omega.T * Kc[:,n1:n] * Kc[n1:n,:] * Omega / n2
+        Eta= eta * eye(2*r)    
+        S1 += Eta
+        S2 += Eta
+
+        mu3 = .5 * (S1.I * mu1.T + S2.I * mu2.T).T
+        S3 = 2 * (S1.I + S2.I).I
+
+        d1 = det(S1) ** -.25
+        d2 = det(S2) ** -.25
+        d3 = det(S3) ** .5
+
+        e1 = exp(-mu1 * S1.I * mu1.T / 4)
+        e2 = exp(-mu2 * S2.I * mu2.T / 4)
+        e3 = exp(mu3 * S3 * mu3.T / 2)
+
+        dterm = d1*d2*d3
+        eterm = e1*e2*e3
+        rval = dterm*eterm
+
+        if isnan(rval):
+            rval = -1
+            print "Warning: Kernel failed on datasets ({},{})".format(i,j)
+        return rval
+
+
+    def kernel_supermatrix(self, i, j):
+        kernel = self.kernel
+        D1 = self.datasets[i]
+        D2 = self.datasets[j]
+        X1 = D1.X
+        X2 = D2.X
+        (n1, d) = X1.shape
+        (n2, d) = X2.shape
+        n = n1 + n2
+        X = bmat('X1; X2')
+        K1 = D1.K
+        K2 = D2.K
+        K = zeros((n,n))
+        K[0:n1, 0:n1] = K1
+        K[n1:n, n1:n] = K2
+        for i in xrange(n1):
+            for j in xrange(n1, n):
+                K[i,j] = kernel(X[i,:], X[j,:])
+                K[j,i] = K[i,j]
+
+        # Inelegant - improve later
+        U1 = sum(K[0:n1,:],0) / n1
+        U2 = sum(K[n1:n,:],0) / n2
+        U1m = tile(U1, (n1,1))
+        U2m = tile(U2, (n2,1))
+        U = bmat('U1m; U2m')
+        m1m1 = sum(K[0:n1, 0:n1]) / (n1*n1)
+        m1m2 = sum(K[0:n1, n1:n]) / (n1*n2)
+        m2m2 = sum(K[n1:n, n1:n]) / (n2*n2) 
+        mumu = zeros((n,n))
+        mumu[0:n1, 0:n1] = m1m1
+        mumu[0:n1, n1:n] = m1m2
+        mumu[n1:n, 0:n1] = m1m2
+        mumu[n1:n, n1:n] = m2m2
+        Kcu = K - U
+        Kuc = Kcu.T
+        N = ones((n,n))/n
+        Kc = K - U - U.T + mumu
+        return (K, Kuc, Kc)
 
 
 class Dataset:
-    """Manage bhattacharrya evaluations of a given dataset"""
-    def __init__(self, X, manager):
+    """Manage bhattacharrya evaluations of a given dataset
+    Contains original data, kernel, and (most importantly) eigenvector decomposition"""
+    def __init__(self, X, kernel, r):
         self.X = X
-        self.kernel = manager.kernel
-        self.r = manager.r
+        self.kernel = kernel
+        self.r = r
         self.K, self.Kc = self.kernel_submatrix()
         self.Beta = self.gen_beta()
-        # 's' stands for 'sub' - to indicate it is a submatrix
-        # rather than a full matrix which combines 2 datasets
 
     def kernel_submatrix(self):
         X = self.X
@@ -63,6 +162,64 @@ class Dataset:
         return Beta
 
 
+def Bhattacharrya(X1, X2, kernel, eta=.1, r=0):
+    """Compute the Bhattacharrya kernel between datasets X1, X2
+    X1 = (n1 x d) matrix, X2 = (n2 x d) matrix. Each row represents a data vector.
+    eta is a regularization parameter, default value .1
+    r is the number of eigenvectors to use. Default value 0 will try to guess a good parameter based on the data. If the parameter is -1, then it will compute the empirical covariance matrices rather than the eigenvector approach.
+    Using the eigenvectors has better stability and is generally much more efficient, so that is recommended. However, if n is very small (n<10) then using the empirical approach may be more appropriate (untested)"""
+    X1 = matrix(X1)
+    X2 = matrix(X2)
+    (n1, d) = X1.shape
+    (n2, d_) = X2.shape
+    assert d == d_
+    n = n1+n2
+    if r == 0:
+        r = min(n1,n2) -1
+        assert r>0
+
+    D1 = Dataset(X1, kernel, r)
+    D2 = Dataset(X2, kernel, r)
+    Beta1 = D1.Beta
+    Beta2 = D2.Beta
+    (n1, r) = Beta1.shape
+    (n2, r) = Beta2.shape
+    n = n1 + n2
+    Beta = zeros((n,2*r))
+    Beta[0:n1,0:r] = Beta1
+    Beta[n1:n,r:2*r] = Beta2
+    (K, Kuc, Kc) = self.kernel_supermatrix(i,j)
+    Omega = eig_ortho(Kc, Beta)
+    mu1 = sum(Kuc[0:n1, :] * Omega, 0) / n1
+    mu2 = sum(Kuc[n1:n, :] * Omega, 0) / n2
+
+    S1 = Omega.T * Kc[:,0:n1] * Kc[0:n1,:] * Omega / n1
+    S2 = Omega.T * Kc[:,n1:n] * Kc[n1:n,:] * Omega / n2
+    Eta= eta * eye(2*r)    
+    S1 += Eta
+    S2 += Eta
+
+    mu3 = .5 * (S1.I * mu1.T + S2.I * mu2.T).T
+    S3 = 2 * (S1.I + S2.I).I
+
+    d1 = det(S1) ** -.25
+    d2 = det(S2) ** -.25
+    d3 = det(S3) ** .5
+
+    e1 = exp(-mu1 * S1.I * mu1.T / 4)
+    e2 = exp(-mu2 * S2.I * mu2.T / 4)
+    e3 = exp(mu3 * S3 * mu3.T / 2)
+
+    dterm = d1*d2*d3
+    eterm = e1*e2*e3
+    rval = dterm*eterm
+
+    if isnan(rval):
+        rval = -1
+        print "Warning: Kernel failed on datasets ({},{})".format(i,j)
+    return rval
+
+
 
 
 
@@ -78,8 +235,9 @@ def empirical_bhatta(X1, X2, kernel, eta, verbose=False):
     except AssertionError:
         return -1
 
-def nk_bhatta(X1, X2, eta):
-    # Make sure X1, X2 are matrix types
+def no_kernel_bhatta(X1, X2, eta):
+    # Returns the non-kernelized Bhattacharrya
+    #I.e. fits normal distributions in input space and calculates Bhattacharrya overlap between them
     (n1, d1) = X1.shape
     (n2, d ) = X2.shape
     assert d1 == d
@@ -88,20 +246,20 @@ def nk_bhatta(X1, X2, eta):
     X1c = X1 - tile(mu1, (n1,1))
     X2c = X2 - tile(mu2, (n2,1))
     Eta = eye(d) * eta
-    S1 = Eta + X1c.T * X1c / n1
-    S2 = Eta + X2c.T * X2c / n2
+    S1 = X1c.T * X1c / n1 + Eta
+    S2 = X2c.T * X2c / n2 + Eta
 
     mu3 = .5 * (S1.I * mu1.T + S2.I * mu2.T).T
     S3  = 2  * (S1.I + S2.I).I
 
-    dt1 = det(S1) ** -.25
-    dt2 = det(S2) ** -.25
-    dt3 = det(S3) ** .5
-    dterm = dt1 * dt2 * dt3
+    d1 = det(S1) ** -.25
+    d2 = det(S2) ** -.25
+    d3 = det(S3) ** .5
+    dterm = d1 * d2 * d3
 
     e1 = -.25 * mu1 * S1.I * mu1.T
     e2 = -.25 * mu2 * S2.I * mu2.T
-    e3 = .5   * mu3 * S3    * mu3.T
+    e3 = .5   * mu3 * S3   * mu3.T
 
     eterm = math.exp(e1 + e2 + e3)
 
@@ -134,24 +292,28 @@ def GS_basis(Kc, verbose=False):
     return G
 
 
+
 def eig_ortho(Kc, Beta):
+    """Takes Beta, a matrix with coefficients for eigenvectors of two datasets. This function returns Omega, which has coefficients for the 'combined' orthonormal eigenvector set.
+    Specifically, Beta[:,0:r] represents the coefficients for an orthonormal set of eigenvectors, and Beta[:,r:2r] represents the coefficients for another orthonormal set of eigenvectors. Omega has the coefficients for the combined orthonormal basis
+    Omega[:,0:r] = Beta[:,0:r] since those eigenvectors were already orthonormal. Omega[:,r:2*r] is the second set of eigenvectors, orthogonalized relative to the first set"""
     (n, rr) = Beta.shape
     # rr literally stands for '2r'
     (n_, n__) = Kc.shape
     assert n == n_ == n__
     Gamma = eye(rr)
-    for i in xrange(rr):
-        for j in xrange(i):
-            W = Beta * Gamma
-            g = W.T[i,:] * Kc * W[:,j]
-            g = float(g)
+    r = rr/2
+    for i in xrange(r, rr): # Skips the first r columns since they're already orthonormal
+        for j in xrange(i): # Make sure the vector is orthogonal to each previous vector
+            Omega = Beta * Gamma
+            g = float(Omega.T[i,:] * Kc * Omega[:,j])
             Gamma[:,i] -= g * Gamma[:,j]
-        W = Beta * Gamma
-        nrm = W.T[i,:] * Kc * W[:,i]
-        assert float(nrm) > 0
-        nrm = float(nrm) ** .5
+        Omega = Beta * Gamma
+        nrm = float(Omega.T[i,:] * Kc * Omega[:,i])
+        assert nrm > 0
+        nrm **=.5
         Gamma[:,i] /= nrm
-    return Gamma
+    return Beta * Gamma
 
 def prepare_bhatta(X1, X2, kernel, eta, verbose=False):
     (n1, d1) = X1.shape
@@ -264,8 +426,7 @@ def eig_bhatta(X1, X2, kernel, eta, r):
     #Eta = eye((gamma, gamma)) * eta
     Beta = bmat('Beta1, Beta2')
     assert not(any(isnan(Beta)))
-    Gamma = eig_ortho(Kc, Beta)
-    Omega = Beta * Gamma
+    Omega = eig_ortho(Kc, Beta)
     mu1_w = sum(Kuc[0:n1, :] * Omega, 0) / n1
     mu2_w = sum(Kuc[n1:n, :] * Omega, 0) / n2
 
@@ -289,7 +450,7 @@ def eig_bhatta(X1, X2, kernel, eta, r):
 
     dterm = d1*d2*d3
     eterm = e1*e2*e3
-    rval = dterm*eterm
+    rval = float(dterm*eterm)
 
     if isnan(rval):
         rval = -1
@@ -325,115 +486,6 @@ def kernel_matrix(X, kernel, n1, n2):
     Kc = K - U - U.T + mumu
     return (K, Kuc, Kc)
 
-def verify_kernel_matrix():
-    n1 = 10
-    n2 = 10
-    n = n1+n2
-    d = 5
-    degree = 3
-    X = randn(n,d)
-    Phi = poly.phi(X, degree)
-    (K, Kuc, Kc) = kernel_matrix(X, polyk(degree), n1, n2)
-    P1 = Phi[0:n1,:]
-    P2 = Phi[n1:n,:]
-
-    mu1 = sum(P1,0) / n1
-    mu2 = sum(P2,0) / n2
-    P1c = P1 - tile(mu1, (n1,1))
-    P2c = P2 - tile(mu2, (n2,1))
-    Pc = bmat('P1c; P2c')
-
-    KP = zeros((n,n))
-    for i in xrange(n):
-        for j in xrange(i+1):
-            KP[i,j] = dotp(Phi[i,:], Phi[j,:])
-            KP[j,i] = KP[i,j]
-
-    KucP = zeros((n,n))
-    for i in xrange(n):
-        for j in xrange(n):
-            KucP[i,j] = dotp(Phi[i,:], Pc[j,:])
-
-    KcP = zeros((n,n))
-    for i in xrange(n):
-        for j in xrange(n):
-            KcP[i,j] = dotp(Pc[i,:], Pc[j,:])
-            #KcP[j,i] = KcP[i,j]
-
-    #debug()
-    print "Div1: " + str(sum(abs(K-KP)))
-    print "Div2: " + str(sum(abs(Kuc-KucP)))
-    print "Div3: " + str(sum(abs(Kc-KcP)))
-
-def test_suite_1():
-    n1 = 100
-    n2 = 100
-    n = n1+n2
-    d = 5
-    eta = .1
-    degree = 3
-    iterations = 1
-    results = zeros((8,5)) 
-    times = zeros((1,5))
-    sigma = 2
-    # 1st col is non-kernelized
-    # 2nd col is poly-kernel 
-
-    for itr in xrange(iterations):
-        X = randn(n1,d)
-        Phi_X = poly.phi(X, degree)
-
-        D0 = X + rand(n2,d) / 1000
-        # Verify identity K(X,X) = 1
-        D1 = randn(n2,d) 
-        # How does kernel perform iid data
-        D2 = rand(n2,d)
-         # Uniform rather than normal distribution
-        D3 = randn(n2,d) * 2 + 2
-        # Linear transformation
-        D4 = power(randn(n2,d) + 1 ,3) 
-        #Non-linear transformation
-        D5 = power(X+1,3) 
-        #non-linear transformation of the D0 dataset;
-        D6 = rand(n2,d)/100 + eye(n2,d) 
-        #Totally different data - should have low similarity
-        D7 = rand(n2,d)/100 + eye(n2,d)*5 
-        # Scaled version of D7
-
-        Data = [D0, D1, D2, D3, D4, D5, D6, D7]
-
-
-        for idx in xrange(8):
-            D = Data[idx]
-            start = time.time()
-            results[idx, 0] += nk_bhatta(X, D, 0)
-            nk = time.time()
-            results[idx, 4] += empirical_bhatta(X, D, gaussk(sigma), eta)
-            emp = time.time()
-            results[idx, 1] += eig_bhatta(X,D,gaussk(sigma),eta,5)
-            e5 = time.time()
-            results[idx, 2] += eig_bhatta(X,D,gaussk(sigma),eta,15)
-            e15 = time.time()
-            results[idx, 3] += eig_bhatta(X,D,gaussk(sigma),eta,25)
-            e25 = time.time()
-            nktime = nk-start
-            emptime = emp-nk
-            e5time = e5-emp
-            e15time = e15-e5
-            e25time = e25-e15
-            print "nk: {:.1f}, emp: {:.1f}, e5: {:.1f}, e15: {:.1f}, e25: {:.1f}".format(nktime, emptime, e5time, e15time, e25time)
-            times[0,0]+= nktime
-            times[0,4]+= emptime
-            times[0,1]+= e5time
-            times[0,2]+= e15time
-            times[0,3]+= e25time
-    results /= iterations
-    print results
-    print times
-
-    return results
-
-
 def dotp(x,y):
     return float(inner(x,y))
 
@@ -446,17 +498,7 @@ def gaussk(sigma):
 def gaussian_kernel(X,Y,sigma):
     return exp( -norm(X-Y)**2 / (2 * sigma**2))
 
-## Debugging Area
 
-
-
-###
-
-
-def main():
-    test_suite_1()
-
-if __name__ == '__main__':
-    main()
-
+def array_hash(A):
+    return hashlib.sha1(A).hexdigest()
 
