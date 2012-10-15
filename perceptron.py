@@ -112,20 +112,20 @@ class BhattaVectorWrapper:
 #     print "     " + str(fn(data1,data2))
 
 def main(): 
-    fn_list = []#[(np.dot,'dot product')]
+    fn_list = [(np.dot,'dot product')]
 
-    # sigmas = list(np.linspace(4, 6,3))
+    sigmas = list(np.linspace(4, 6,3))
 
-    # for sigma in sigmas:
-    #     new_fn = partial(gaussian_rbf, sigma=sigma)
-    #     infotext = "RBF sigma = " + str(sigma)
-    #     fn_list.append((new_fn,infotext))
+    for sigma in sigmas:
+        new_fn = partial(gaussian_rbf, sigma=sigma)
+        infotext = "RBF sigma = " + str(sigma)
+        fn_list.append((new_fn,infotext))
 
-    # polys = [3,5]
-    # for poly in polys:
-    #     new_fn = partial(poly_kernel, p=poly)
-    #     infotext = "Poly p = " + str(poly)
-    #     fn_list.append((new_fn, infotext))
+    polys = [3,5]
+    for poly in polys:
+        new_fn = partial(poly_kernel, p=poly)
+        infotext = "Poly p = " + str(poly)
+        fn_list.append((new_fn, infotext))
 
     gsk = [.5, 1, 5]
     for gauss in gsk:
