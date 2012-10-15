@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # Some test functions to determine if the kernel or different components of it are working properly.
 import numpy as np
 import numpy.matlib as mat
@@ -16,31 +17,31 @@ def test_suite_1():
     eta = .1
     degree = 3
     iterations = 1
-    results = zeros((8,5)) 
-    times = zeros((1,5))
+    results = mat.zeros((8,5)) 
+    times = mat.zeros((1,5))
     sigma = 2
     # 1st col is non-kernelized
     # 2nd col is poly-kernel 
 
     for itr in xrange(iterations):
-        X = randn(n1,d)
+        X = mat.randn(n1,d)
         Phi_X = poly.phi(X, degree)
 
-        D0 = X + rand(n2,d) / 1000
+        D0 = X + mat.rand(n2,d) / 1000
         # Verify identity K(X,X) = 1
-        D1 = randn(n2,d) 
+        D1 = mat.randn(n2,d) 
         # How does kernel perform iid data
-        D2 = rand(n2,d)
+        D2 = mat.rand(n2,d)
          # Uniform rather than normal distribution
-        D3 = randn(n2,d) * 2 + 2
+        D3 = mat.randn(n2,d) * 2 + 2
         # Linear transformation
-        D4 = power(randn(n2,d) + 1 ,3) 
+        D4 = mat.power(mat.randn(n2,d) + 1 ,3) 
         #Non-linear transformation
-        D5 = power(X+1,3) 
+        D5 = mat.power(X+1,3) 
         #non-linear transformation of the D0 dataset;
-        D6 = rand(n2,d)/100 + eye(n2,d) 
+        D6 = mat.rand(n2,d)/100 + mat.eye(n2,d) 
         #Totally different data - should have low similarity
-        D7 = rand(n2,d)/100 + eye(n2,d)*5 
+        D7 = mat.rand(n2,d)/100 + mat.eye(n2,d)*5 
         # Scaled version of D7
 
         Data = [D0, D1, D2, D3, D4, D5, D6, D7]
@@ -53,11 +54,11 @@ def test_suite_1():
             nk = time.time()
             results[idx, 4] += empirical_bhatta(X, D, gaussk(sigma), eta)
             emp = time.time()
-            results[idx, 1] += eig_bhatta(X,D,gaussk(sigma),eta,5)
+            results[idx, 1] += Bhattacharrya(X,D,gaussk(sigma),eta,5)
             e5 = time.time()
-            results[idx, 2] += eig_bhatta(X,D,gaussk(sigma),eta,15)
+            results[idx, 2] += Bhattacharrya(X,D,gaussk(sigma),eta,15)
             e15 = time.time()
-            results[idx, 3] += eig_bhatta(X,D,gaussk(sigma),eta,25)
+            results[idx, 3] += Bhattacharrya(X,D,gaussk(sigma),eta,25)
             e25 = time.time()
             nktime = nk-start
             emptime = emp-nk
@@ -88,24 +89,24 @@ def verify_kernel_matrix():
     P1 = Phi[0:n1,:]
     P2 = Phi[n1:n,:]
 
-    mu1 = sum(P1,0) / n1
-    mu2 = sum(P2,0) / n2
-    P1c = P1 - tile(mu1, (n1,1))
-    P2c = P2 - tile(mu2, (n2,1))
+    mu1 = mat.sum(P1,0) / n1
+    mu2 = mat.sum(P2,0) / n2
+    P1c = P1 - mat.tile(mu1, (n1,1))
+    P2c = P2 - mat.tile(mu2, (n2,1))
     Pc = bmat('P1c; P2c')
 
-    KP = zeros((n,n))
+    KP = mat.zeros((n,n))
     for i in xrange(n):
         for j in xrange(i+1):
             KP[i,j] = dotp(Phi[i,:], Phi[j,:])
             KP[j,i] = KP[i,j]
 
-    KucP = zeros((n,n))
+    KucP = mat.zeros((n,n))
     for i in xrange(n):
         for j in xrange(n):
             KucP[i,j] = dotp(Phi[i,:], Pc[j,:])
 
-    KcP = zeros((n,n))
+    KcP = mat.zeros((n,n))
     for i in xrange(n):
         for j in xrange(n):
             KcP[i,j] = dotp(Pc[i,:], Pc[j,:])
@@ -116,5 +117,10 @@ def verify_kernel_matrix():
     print "Div2: " + str(sum(abs(Kuc-KucP)))
     print "Div3: " + str(sum(abs(Kc-KcP)))
 
+def main():
+    test_suite_1()
 
+
+if __name__ == '__main__':
+    main()
 
