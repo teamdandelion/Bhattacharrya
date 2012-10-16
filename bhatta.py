@@ -14,7 +14,22 @@ def Bhattacharrya_Kernel_Matrix(Data, kernel, eta, r):
     return manager.bhatta_matrix()
 
 
-class HashBhatta:
+def Bhattacharrya(kernel, r, eta):
+    """Returns a hashed Bhattacharrya function with the kernel, eta, and r as given.
+    Description:
+    The Bhattacharrya function is a kernel between sets of vectors X1 and X2. The algorithm maps the two sets of vectors to a feature space using a base kernel, fits normal distributions to the data in that feature space, and then calculates the Bhattacharrya overlap between those probability distributions. For details, see the paper A Kernel Between Sets of Vectors by R. Kondor and T. Jebara (2003): 
+        http://www1.cs.columbia.edu/~jebara/papers/KonJeb03.pdf
+
+    The datasets X1 and X2 are represented as (n1 x d) and (n2 x d) matrices respectively. Each row corresponds to a data vector.
+
+    Parameters:
+    kernel: a base kernel used to map the data sets to feature space. I recommend a gaussian kernel 'gaussk(sigma)'
+    r: the number of eigenvectors used to reconstruct the covariance matrix. I recommend between 5 and 20.
+    eta: a regularization parameter used for 'smoothing' 
+
+    Returns: A kernel function k(X1,X2). Computes the Bhattacharrya kernel between the two datasets."""
+
+class HashBhattaClass:
     """Handles Bhattacharrya kernel evaluations efficiently with a simple interface"""
     def __init__(self, kernel, eta, r):
         self.kernel = kernel
