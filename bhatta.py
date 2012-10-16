@@ -28,10 +28,12 @@ def Bhattacharrya(kernel, r, eta):
     eta: a regularization parameter used for 'smoothing' 
 
     Returns: A kernel function k(X1,X2). Computes the Bhattacharrya kernel between the two datasets."""
+    HashBhatta = HashBhattaClass(kernel, r, eta)
+    return HashBhatta.bhatta
 
 class HashBhattaClass:
     """Handles Bhattacharrya kernel evaluations efficiently with a simple interface"""
-    def __init__(self, kernel, eta, r):
+    def __init__(self, kernel, r, eta):
         self.kernel = kernel
         self.eta = eta
         self.r = r 
