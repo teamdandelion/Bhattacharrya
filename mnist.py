@@ -19,6 +19,8 @@ def vectorize_images(imgs):
         vectorized_images.append(numpy.matrix(img))
     return vectorized_images
 
+    
+
 def save_vectorize():
     vim = vectorize_images(train_set[0][0:20,:])
     with open('vectorized_mnist.pkl', 'w') as f:
