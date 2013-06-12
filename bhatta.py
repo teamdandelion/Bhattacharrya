@@ -28,10 +28,10 @@ def Bhattacharrya(kernel, r, eta):
     eta: a regularization parameter used for 'smoothing' 
 
     Returns: A kernel function k(X1,X2). Computes the Bhattacharrya kernel between the two datasets."""
-    HashBhatta = HashBhattaClass(kernel, r, eta)
-    return HashBhatta.bhatta
+    MemoziedBhatta = MemoizedBhattaClass(kernel, r, eta)
+    return MemoziedBhatta.bhatta
 
-class HashBhattaClass:
+class MemoizedBhattaClass:
     """Handles Bhattacharrya kernel evaluations efficiently with a simple interface"""
     def __init__(self, kernel, r, eta):
         self.kernel = kernel
@@ -170,8 +170,8 @@ class Dataset:
         self.X = X
         self.kernel = kernel
         self.r = r
-        self.K, self.Kc = self.kernel_submatrix()
-        self.Beta = self.gen_beta()
+        self.K, self.Kc = self.kernel_submatrix() # Kernel matrix and centered kernel matrix
+        self.Beta = self.gen_beta() # Eigenvector decomposition
 
     def kernel_submatrix(self):
         X = self.X
@@ -190,8 +190,8 @@ class Dataset:
     def gen_beta(self):
         (n,n_) = self.Kc.shape
         (Lam, Alpha) = eigsh(self.Kc, self.r)
-        Alpha = mat.matrix(Alpha)
-        Lam = Lam / n
+        Alpha = mat.matrix(Alpha) 
+        Lam = Lam / n # Eigenvalues
         def greater_than_zero(x): return x>0
         assert all(map(greater_than_zero,Lam))
 
