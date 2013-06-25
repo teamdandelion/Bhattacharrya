@@ -3,7 +3,6 @@ import numpy as np
 import numpy.matlib as mat
 import numpy.linalg as la
 import math, hashlib, time, cPickle
-import bhatta_poly as poly
 from scipy.sparse.linalg import eigsh # Lanzcos algorithm
 
 def Bhattacharrya_Kernel_Matrix(Data, kernel, eta, r):
@@ -42,7 +41,7 @@ class MemoizedBhattaClass:
     def bhatta(self, X1, X2):
         D1 = self.get_data(X1)
         D2 = self.get_data(X2)
-        return BhattaFromDataset(D1,D2, self.eta)
+        return BhattaFromDataset(D1, D2, self.eta)
 
     def get_data(self, X):
         hashval = array_hash(X)
@@ -65,8 +64,10 @@ class Bhatta_Manager:
         # r: number of eigenvectors to use, r < min(n1, n2...)
         # etas: [eta1, eta2, eta3] normalization factors
         self.kernel = kernel
-        self.r = r
-        self.eta = eta
+        self.r      = r
+        self.eta    = eta
+        # Since a lot of work is specific to an individual dataset but independent of the others, we 
+        # do some precomuptation on each dataset using the Dataset class
         self.datasets = map(Dataset, Data)
 
     def bhatta_matrix(self):
@@ -80,6 +81,7 @@ class Bhatta_Manager:
         return BM
 
     def bhatta(self,i,j):
+        """Here is the actual Bhattacharrya algorithm"""
         eta = self.eta
         D1 = self.datasets[i]
         D2 = self.datasets[j]
@@ -91,14 +93,18 @@ class Bhatta_Manager:
         Beta = mat.zeros((n,2*r))
         Beta[0:n1,0:r] = Beta1
         Beta[n1:n,r:2*r] = Beta2
+
         (K, Kuc, Kc) = self.kernel_supermatrix(i,j)
+        # K = uncentered kernel matrix 
+        # Kuc = Matrix between centered and uncentered vectors
+        # Kc = Centered kernel matrix
         Omega = eig_ortho(Kc, Beta)
         mu1 = mat.sum(Kuc[0:n1, :] * Omega, 0) / n1
         mu2 = mat.sum(Kuc[n1:n, :] * Omega, 0) / n2
 
-        S1 = Omega.T * Kc[:,0:n1] * Kc[0:n1,:] * Omega / n1
-        S2 = Omega.T * Kc[:,n1:n] * Kc[n1:n,:] * Omega / n2
-        Eta= eta * mat.eye(2*r)    
+        S1  = Omega.T * Kc[:,0:n1] * Kc[0:n1,:] * Omega / n1
+        S2  = Omega.T * Kc[:,n1:n] * Kc[n1:n,:] * Omega / n2
+        Eta = eta * mat.eye(2*r)    
         S1 += Eta
         S2 += Eta
 
@@ -113,9 +119,9 @@ class Bhatta_Manager:
         e2 = exp(-mu2 * S2.I * mu2.T / 4)
         e3 = exp(mu3 * S3 * mu3.T / 2)
 
-        dterm = d1*d2*d3
-        eterm = e1*e2*e3
-        rval = dterm*eterm
+        dterm = d1 * d2 * d3
+        eterm = e1 * e2 * e3
+        rval = dterm * eterm
 
         if math.isnan(rval):
             rval = -1
@@ -165,7 +171,11 @@ class Bhatta_Manager:
 
 class Dataset:
     """Manage bhattacharrya evaluations of a given dataset
-    Contains original data, kernel, and (most importantly) eigenvector decomposition"""
+    Contains original data, kernel, and (most importantly) 
+    eigenvector decomposition.
+    Since a lot of work is specific to the individual dataset (and independent of 
+    the 2nd dataset we are comparing to for the Bhattacharrya evaluation) 
+    it is efficient to precompute and cache the work on a dataset """
     def __init__(self, X, kernel, r):
         self.X = X
         self.kernel = kernel
@@ -174,6 +184,8 @@ class Dataset:
         self.Beta = self.gen_beta() # Eigenvector decomposition
 
     def kernel_submatrix(self):
+        # Cache kernel evaluations between vectors in this dataset so we don't repeat this work every
+        # time we call Bhattacharrya
         X = self.X
         (n,d) = X.shape
         K = mat.zeros((n,n))
