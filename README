@@ -16,4 +16,13 @@ Since the mathematics are fairly opaque it can be difficult to prove correctness
 "bhatta_plots.py" is a utility for vizualising kernel evaluations between datasets
 "mnist.py" handles loading the MNIST digit database and vectorizing it into a form the Bhattacharrya kernel can handle
 "bhatta_poly" contains utilities to explicitly discover the polynomial feature space, for bugtesting the kernel and confirming correctness
-"Matlab/" contains Matlab versions of the kernel; may not be correct atm
+"Matlab/" contains Matlab versions of the kernel; may not be correct atm. The multi_poly_bhatta.matlab file is useful for comparing the closed-form polynomial RKHS version of the algorithm to empirical and PCA evaluations.
+
+Here's an email I sent to Risi which is relevant: 
+
+Hey Risi,
+I've done some more work organizing and commenting the Bhattacharrya code, as well as adding a readme. The key insight I had while working on this project was figuring out how to test the correctness of a Bhattacharrya kernel implementation. It's very straightforward to calculate the Bhattacharrya overlap between two distributes in a known, regular space, and it's straightforward to map any dataset into the reproducing Hilbert space for the polynomial kernel. So, to test a kernelized Bhattacharrya implementation, take some data, map it into the polynomial kernel rkhs, directly compute the Bhattacharrya overlap in that space, and compare to what the Bhattacharrya kernel algorithm gives for the same data with a polynomial base kernel. 
+
+This testing method has another significant benefit, in that you can test individual components of Bhattacharrya algorithm. Since there is a 1-to-1 mapping between components (covariance matrices and determinants) between the Bhattacharrya evaluation in the polynomial RKHS and the Bhattacharrya algorithm with a base kernel, if there is an error in the algorithm you can isolate which component is failing. Through this method, I discovered that the math as described in the paper doesn't quite work out: the mixed determinant and covariance terms break. I think this had to do with the proposed method of constructing a shared basis using Gram-Schmidt orthogonalization failing. I don't quite remember why the issue surfaced, but I do know that I fixed it and the fix is reflected in the Python algorithm.
+
+Matlab was particularly helpful in debugging the algorithm. Take a look for example at multi_poly_bhatta.m. It generates a bunch of random datasets, and computes Phi (the polynomial RKHS) for them. It then generates the closed-form Bhattacharrya evaluation RKHS data, as well as the empirical and PCA Bhattacharrya algorithm evaluations using just the kernel matrix. So you can use it to compare the different Bhattacharrya components in the kernelized and closed form versions. 
