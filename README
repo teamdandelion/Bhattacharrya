@@ -1,5 +1,16 @@
 Implements the Bhattacharrya Kernel in Python and Matlab.
 
+The Bhattacharrya Kernel:
+The Bhattacharrya Kernel is described by Kondor in "A Kernel Between Sets of Vectors" (Kondor & Jebara, http://machinelearning.wustl.edu/mlpapers/paper_files/icml2003_KondorJ03.pdf). The kernel takes a base kernel k, two datasets D1 and D2, where each dataset is a set of vectors in R^r (r-dimensional space). The Bhattacharrya kernel then maps the vectors in these two sets into a Hilbert space using the base kernel and calculates the Bhattacharrya overlap between the two datasets in the Hilbert space.
+
+For the mathematics, see "A Kernel Between Sets of Vectors".
+
+The Algorithm:
+The program in "bhatta.py" is built so it can take a number of datasets and compute the Bhattacharrya Kernel matrix between them, or can compute Bhattacharrya evaluations between individual datasets. Because a lot of the computation is independent to each individual dataset, the Bhatta_Manager class instantiates a Dataset object for each dataset, which precomputes the eigenvector decomposition, local kernel matrix, etc. The MemorizedBhatta class operates with a similar principle but takes new Datasets on the fly, so that not all the Datasets need to be known at object instantiation.
+
+Proving Correctness:
+Since the mathematics are fairly opaque it can be difficult to prove correctness of the Bhattacharrya algorithm. However, we can test the correctness of the algorithm using the polynomial kernel. Since the polynomial kernel maps to a known and easily computed Hilbert space, we can directly map datasets into the polynomial kernel's Hilbert space and manually test the Bhattacharrya overlap, and compare this result to the Bhattacharrya algorithm evaluation with a polynomial base kernel. If the results are identical for several random datasets, it is extremely likely that the algorithm is producing the correct result. Furthermore, calculating the direct Bhattacharrya overlap in a known space and mapping data into the polynomial-kernel Hilbert space are both very simple operations.
+
 "bhatta.py" contains the kernel. This is the main file
 "basis.py" contains some helper functions
 "bhatta_plots.py" is a utility for vizualising kernel evaluations between datasets
