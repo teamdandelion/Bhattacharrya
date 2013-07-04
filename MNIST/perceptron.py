@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+
+# This code is an attempt to use the Bhattacharrya kernel to discriminate MNIST digits using Perceptron. 
+# I didn't have much success (very high error rate)
+
 from pdb import set_trace as debug
 import numpy as np
 from numpy import array, zeros, exp
